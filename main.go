@@ -63,6 +63,7 @@ func main() {
 
 	ticker := time.NewTicker(time.Second * 30)
 	defer ticker.Stop()
+	defer streamFactory.WaitConsumers()
 	for {
 		// todo: 等待Diff任务启动，若未启动，请勿进行抓包消耗CPU
 		// your code here...
