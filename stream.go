@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"sync"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -14,13 +15,29 @@ import (
 )
 
 type tcpStream struct {
-	c2sBuf *buffer
-	s2cBuf *buffer
+	factoryWg *sync.WaitGroup
+	// protocol tcpStream挟带数据的上层协议类型
+	protocol string
+	// isDetect 已经确定该Stream的协议类型
+	isDetect bool
+	c2sBuf   *buffer
+	s2cBuf   *buffer
 }
 
 func (s *tcpStream) Accept(tcp *layers.TCP, ci gopacket.CaptureInfo, dir reassembly.TCPFlowDirection, nextSeq reassembly.Sequence, start *bool, ac reassembly.AssemblerContext) bool {
-	// todo: 我们可以在这里检测tcp挟带的应用层数据
-	//  Your code here...
+	if *start {
+		return true // Important! First SYN packet must be accepted.
+	}
+	// 当我们检测到应用层协议后，创建消费者进行消费。
+	if !s.isDetect {
+		s.protocol = guessProtocol(tcp.Payload)
+		if s.protocol == UnknownType {
+			return false // drop it.
+		}
+		s.isDetect = true
+		s.factoryWg.Add(1)
+		go s.consume()
+	}
 	return true
 }
 
@@ -37,20 +54,26 @@ func (s *tcpStream) ReassembledSG(sg reassembly.ScatterGather, ac reassembly.Ass
 	}
 }
 
+// ReassemblyComplete will be called when stream receive two endpoint FIN packet.
 func (s *tcpStream) ReassemblyComplete(ac reassembly.AssemblerContext) bool {
 	close(s.c2sBuf.bytes)
 	close(s.s2cBuf.bytes)
-	// do not remove the connection to allow last ACK
-	return false
+	return true
 }
 
 // consume 消费两个缓存中的数据进行下一步处理
 func (s *tcpStream) consume() {
-	c2sReader := bufio.NewReader(s.c2sBuf)
-	s2cReader := bufio.NewReader(s.s2cBuf)
-	// todo: 这里等待stream检测出应用层类型后才能开始正确消费流量
-	//  如你所见，目前默认为http数据，以后我们还想支持grpc的http2和thrift，kafka，redis...
+	defer s.factoryWg.Done()
 
+	switch s.protocol {
+	case HttpType:
+		handleHttp(s.c2sBuf, s.s2cBuf)
+	}
+}
+
+func handleHttp(c2s, s2c io.Reader) {
+	c2sReader := bufio.NewReader(c2s)
+	s2cReader := bufio.NewReader(s2c)
 	for {
 		req, err := http.ReadRequest(c2sReader)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
