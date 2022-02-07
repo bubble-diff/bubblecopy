@@ -5,6 +5,9 @@
 .vscode/
 .idea/
 
+# IDL
+idl/
+
 # Binaries for programs and plugins
 bubblecopy
 output/

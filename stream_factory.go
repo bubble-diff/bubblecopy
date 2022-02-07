@@ -16,9 +16,9 @@ type tcpStreamFactory struct {
 func (f *tcpStreamFactory) New(netFlow, tcpFlow gopacket.Flow, tcp *layers.TCP, ac reassembly.AssemblerContext) reassembly.Stream {
 	s := &tcpStream{
 		factoryWg: &f.wg,
-		isDetect: false,
-		c2sBuf: NewBuffer(),
-		s2cBuf: NewBuffer(),
+		isDetect:  false,
+		c2sBuf:    NewBuffer(),
+		s2cBuf:    NewBuffer(),
 	}
 	return s
 }

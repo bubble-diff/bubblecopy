@@ -11,3 +11,7 @@ const (
 	UnknownType = "unknown"
 	HttpType    = "http"
 )
+
+const (
+	ApiAddRecord = "/record/add"
+)

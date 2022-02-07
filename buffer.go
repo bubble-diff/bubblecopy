@@ -1,6 +1,8 @@
 package main
 
-import "io"
+import (
+	"io"
+)
 
 type buffer struct {
 	bytes chan []byte
@@ -8,7 +10,9 @@ type buffer struct {
 }
 
 func NewBuffer() *buffer {
-	// todo: bytes可以做成带缓存的channel吗？
+	// 这里，必须是无缓存的channel，因为channel是stream进行close的。
+	// 如果带缓存，stream关掉channel后，consumer会消费失败。
+	// todo: 将close交给consume去做？这样就可以带缓存了
 	return &buffer{bytes: make(chan []byte)}
 }
 

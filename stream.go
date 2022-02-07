@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"sync"
@@ -12,6 +14,9 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/reassembly"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/bubble-diff/bubblecopy/pb"
 )
 
 type tcpStream struct {
@@ -58,7 +63,8 @@ func (s *tcpStream) ReassembledSG(sg reassembly.ScatterGather, ac reassembly.Ass
 func (s *tcpStream) ReassemblyComplete(ac reassembly.AssemblerContext) bool {
 	close(s.c2sBuf.bytes)
 	close(s.s2cBuf.bytes)
-	return true
+	// false to receive last ack for avoiding New tcpStream.
+	return false
 }
 
 // consume 消费两个缓存中的数据进行下一步处理
@@ -79,31 +85,75 @@ func handleHttp(c2s, s2c io.Reader) {
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			break
 		} else if err != nil {
-			log.Println(err)
+			logrus.Error(err)
 			continue
 		}
 		resp, err := http.ReadResponse(s2cReader, nil)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			break
 		} else if err != nil {
-			log.Println(err)
+			logrus.Error(err)
 			continue
 		}
 
-		// todo: 我们目前只是将http req/resp以日志的形式打印下来
-		//  后期我们在这里需要添加过滤http流量，以及转发至replayer的能力
-		bytes, err := httputil.DumpRequest(req, true)
+		err = sendReqResp(req, resp)
 		if err != nil {
-			log.Println(err)
+			logrus.Errorf("send old req/resp failed, %s", err)
+		} else {
+			logrus.Info("send old req/resp ok")
 		}
-		req.Body.Close()
-		logrus.Debug(string(bytes))
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Println(err)
-		}
+		req.Body.Close()
 		resp.Body.Close()
-		logrus.Debug(string(body))
 	}
+}
+
+// sendReqResp 将old req/resp发送至replay服务进行进一步处理
+// todo: 这个函数应该是协议无关的，现在参数为http协议。
+func sendReqResp(req *http.Request, resp *http.Response) (err error) {
+	// 序列化req/resp
+	rawReq, err := httputil.DumpRequest(req, true)
+	if err != nil {
+		return err
+	}
+	rawResp, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// send them
+	request := &pb.AddRecordReq{
+		Record: &pb.Record{
+			TaskId:  configuration.Taskid,
+			OldReq:  rawReq,
+			OldResp: rawResp,
+			NewResp: nil,
+		},
+	}
+	rawpb, err := proto.Marshal(request)
+	if err != nil {
+		return err
+	}
+
+	api := fmt.Sprintf("http://%s%s", configuration.ReplaySvrAddr, ApiAddRecord)
+	apiResp, err := http.Post(api, "application/octet-stream", bytes.NewReader(rawpb))
+	defer apiResp.Body.Close()
+	if err != nil {
+		return err
+	}
+
+	// parse api response
+	var response pb.AddRecordResp
+	rawApiResp, err := io.ReadAll(apiResp.Body)
+	if err != nil {
+		return err
+	}
+	err = proto.Unmarshal(rawApiResp, &response)
+	if err != nil {
+		return err
+	} else if response.Code != 0 {
+		return errors.New(response.Msg)
+	}
+
+	return nil
 }
