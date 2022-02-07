@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/google/gopacket"
@@ -61,14 +62,19 @@ func main() {
 	streamPool := reassembly.NewStreamPool(streamFactory)
 	assembler := reassembly.NewAssembler(streamPool)
 
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+
 	ticker := time.NewTicker(time.Second * 30)
-	defer ticker.Stop()
-	defer streamFactory.WaitConsumers()
 	for {
 		// todo: 等待Diff任务启动，若未启动，请勿进行抓包消耗CPU
 		// your code here...
 
+		done := false
 		select {
+		case <-signalChan:
+			logrus.Info("Caught SIGINT: aborting")
+			done = true
 		case <-ticker.C:
 			// 停止监听30秒内无数据传输的连接
 			assembler.FlushCloseOlderThan(time.Now().Add(time.Second * -30))
@@ -79,5 +85,16 @@ func main() {
 				assembler.Assemble(packet.NetworkLayer().NetworkFlow(), tcp)
 			}
 		}
+		if done {
+			break
+		}
 	}
+
+	ticker.Stop()
+	// Important! Please flush all connection before waiting consumers.
+	closed := assembler.FlushAll()
+	logrus.Debugf("Final flush: %d closed", closed)
+
+	streamFactory.WaitConsumers()
+	logrus.Info("Bye~")
 }

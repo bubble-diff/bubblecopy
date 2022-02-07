@@ -10,13 +10,15 @@ import (
 
 type config struct {
 	// Taskid Diff任务ID
-	Taskid int `json:"taskid"`
+	Taskid int64 `json:"taskid"`
 	// Secret 访问对应id任务配置的密钥
 	Secret string `json:"secret"`
 	// Device 网卡名称
 	Device string `json:"interface"`
 	// Port 被测服务端口
 	Port string `json:"service_port"`
+	// ReplaySvrAddr bubblereplay服务地址
+	ReplaySvrAddr string `json:"replay_svr_addr"`
 
 	// DeviceIPv4 网卡ipv4地址
 	DeviceIPv4 string
@@ -33,6 +35,10 @@ func (c *config) init() {
 	err = json.Unmarshal(bytes, &configuration)
 	if err != nil {
 		logrus.Fatal(err)
+	}
+
+	if configuration.ReplaySvrAddr == "" {
+		logrus.Fatal("bubblereplay server addr not set")
 	}
 
 	c.DeviceIPv4, err = getDeviceIpv4(c.Device)
