@@ -81,6 +81,7 @@ func handleHttp(c2s, s2c io.Reader) {
 	c2sReader := bufio.NewReader(c2s)
 	s2cReader := bufio.NewReader(s2c)
 	for {
+		// read http request and response.
 		req, err := http.ReadRequest(c2sReader)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			break
@@ -96,6 +97,7 @@ func handleHttp(c2s, s2c io.Reader) {
 			continue
 		}
 
+		// send http req/resp to bubblereplay.
 		err = sendReqResp(req, resp)
 		if err != nil {
 			logrus.Errorf("send old req/resp failed, %s", err)
@@ -137,7 +139,6 @@ func sendReqResp(req *http.Request, resp *http.Response) (err error) {
 
 	api := fmt.Sprintf("http://%s%s", configuration.ReplaySvrAddr, ApiAddRecord)
 	apiResp, err := http.Post(api, "application/octet-stream", bytes.NewReader(rawpb))
-	defer apiResp.Body.Close()
 	if err != nil {
 		return err
 	}
@@ -155,5 +156,5 @@ func sendReqResp(req *http.Request, resp *http.Response) (err error) {
 		return errors.New(response.Msg)
 	}
 
-	return nil
+	return apiResp.Body.Close()
 }
