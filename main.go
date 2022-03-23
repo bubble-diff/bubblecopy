@@ -69,10 +69,15 @@ func main() {
 
 	ticker := time.NewTicker(time.Second * 30)
 	for {
-		// todo: 等待Diff任务启动，若未启动，请勿进行抓包消耗CPU
-		// your code here...
-
+		skip := false
 		done := false
+
+		// 等待Diff任务启动，若未启动，请勿进行抓包消耗CPU
+		if configuration.getIsTaskRunning() == false {
+			logrus.Infof("TaskID=%d is not running, self sleeping...", configuration.Taskid)
+			skip = true
+		}
+
 		select {
 		case <-signalChan:
 			logrus.Info("Caught SIGINT: aborting")
@@ -80,15 +85,25 @@ func main() {
 		case <-ticker.C:
 			// 停止监听30秒内无数据传输的连接
 			assembler.FlushCloseOlderThan(time.Now().Add(time.Second * -30))
+		default:
+			// nop
+		}
+
+		if done {
+			break
+		}
+		if skip {
+			time.Sleep(time.Second)
+			continue
+		}
+
+		select {
 		case packet := <-source.Packets():
 			tcp := packet.Layer(layers.LayerTypeTCP)
 			if tcp != nil {
 				tcp := tcp.(*layers.TCP)
 				assembler.Assemble(packet.NetworkLayer().NetworkFlow(), tcp)
 			}
-		}
-		if done {
-			break
 		}
 	}
 
