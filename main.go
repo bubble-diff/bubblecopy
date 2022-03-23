@@ -16,7 +16,7 @@ import (
 
 var debugmode bool
 
-func init() {
+func Init() {
 	flag.BoolVar(&debugmode, "debug", false, "Run as debug mode, read settings file to override task configuration if existsed.")
 	flag.Parse()
 
@@ -37,12 +37,14 @@ func init() {
 }
 
 func main() {
+	Init()
+
 	handle, err := pcap.OpenLive(configuration.Device, SnapshotLen, false, pcap.BlockForever)
-	defer handle.Close()
 	if err != nil {
 		logrus.Error(err)
 		logrus.Fatal("Try sudo.")
 	}
+	defer handle.Close()
 
 	// 过滤出当前服务的流量
 	filter := fmt.Sprintf(
