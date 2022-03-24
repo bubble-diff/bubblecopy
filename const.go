@@ -14,4 +14,6 @@ const (
 
 const (
 	ApiAddRecord = "/record/add"
+	ApiTaskStatus = "/task_status"
+	ApiSetDeployed = "/deploy"
 )
