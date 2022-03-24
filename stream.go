@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,9 +14,6 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/reassembly"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
-
-	"github.com/bubble-diff/bubblecopy/pb"
 )
 
 type tcpStream struct {
@@ -111,7 +108,7 @@ func handleHttp(c2s, s2c io.Reader) {
 }
 
 // sendReqResp 将old req/resp发送至replay服务进行进一步处理
-// todo: 这个函数应该是协议无关的，现在参数为http协议。
+// todo: 为了支持多种协议，这个函数应该是协议无关的，现在参数为http协议。
 func sendReqResp(req *http.Request, resp *http.Response) (err error) {
 	// 序列化req/resp
 	rawReq, err := httputil.DumpRequest(req, true)
@@ -124,37 +121,26 @@ func sendReqResp(req *http.Request, resp *http.Response) (err error) {
 	}
 
 	// send them
-	request := &pb.AddRecordReq{
-		Record: &pb.Record{
-			TaskId:  configuration.Taskid,
-			OldReq:  rawReq,
-			OldResp: rawResp,
-			NewResp: nil,
-		},
+	record := &Record{
+		TaskID:  configuration.Taskid,
+		OldReq:  rawReq,
+		OldResp: rawResp,
+		NewResp: nil,
 	}
-	rawpb, err := proto.Marshal(request)
+	b, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
 
 	api := fmt.Sprintf("http://%s%s", configuration.ReplaySvrAddr, ApiAddRecord)
-	apiResp, err := http.Post(api, "application/octet-stream", bytes.NewReader(rawpb))
+	apiResp, err := http.Post(api, "application/json", bytes.NewReader(b))
 	if err != nil {
 		return err
+	}
+	err = apiResp.Body.Close()
+	if err != nil {
+		logrus.Errorf("close AddRecord Resp.Body failed, %s", err)
 	}
 
-	// parse api response
-	var response pb.AddRecordResp
-	rawApiResp, err := io.ReadAll(apiResp.Body)
-	if err != nil {
-		return err
-	}
-	err = proto.Unmarshal(rawApiResp, &response)
-	if err != nil {
-		return err
-	} else if response.Code != 0 {
-		return errors.New(response.Msg)
-	}
-
-	return apiResp.Body.Close()
+	return nil
 }
