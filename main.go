@@ -104,6 +104,8 @@ func main() {
 				tcp := tcp.(*layers.TCP)
 				assembler.Assemble(packet.NetworkLayer().NetworkFlow(), tcp)
 			}
+		default:
+			// nop
 		}
 	}
 
