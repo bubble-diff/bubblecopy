@@ -1,6 +1,7 @@
 # DEBUG_SETTINGS is used for local test easily.
 define DEBUG_SETTINGS
 {
+	"taskid": 2,
 	"interface": "lo0",
 	"service_port": "8080",
 	"replay_svr_addr": "127.0.0.1:6789"

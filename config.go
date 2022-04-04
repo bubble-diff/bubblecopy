@@ -118,7 +118,7 @@ func (c *config) reportDepolyed() {
 		Addr string `json:"addr"`
 	}{
 		TaskID: c.Taskid,
-		Addr:   c.DeviceIPv4,
+		Addr:   fmt.Sprintf("%s:%s", c.DeviceIPv4, c.Port),
 	}
 	var apiResp struct {
 		Err string `json:"err"`
